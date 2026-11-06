@@ -5,54 +5,51 @@ import { Reservation, Task } from '../types';
 export interface User {
   id: string;
   name: string;
-  phone: string;
+  phone: string | number;
+  email: string;
   role?: 'driver' | 'admin';
 }
 
 export const userService = {
-  async loginOrRegister(name: string, phone: string): Promise<User | null> {
-    // Sanitize phone (remove non-digits)
-    const cleanPhone = phone.replace(/\D/g, '');
+  async signUp(input: { name: string; phone: string; email: string; password: string }): Promise<{ user: User | null }> {
+    const { data, error } = await supabase.auth.signUp({
+      email: input.email,
+      password: input.password,
+      options: {
+        emailRedirectTo: window.location.origin,
+        data: { name: input.name, phone: input.phone.replace(/\D/g, '') }
+      }
+    });
+    if (error) throw error;
+    if (!data.session || !data.user) return { user: null };
+    return { user: await this.getCurrentUser(data.user.id) };
+  },
 
-    // 1. Try to find user by phone (assuming phone is unique identifier for "login")
-    const { data: existingUser, error: findError } = await supabase
-      .from('users')
-      .select('*, role')
-      .eq('phone', cleanPhone)
-      .single();
+  async signIn(email: string, password: string): Promise<User> {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    if (!data.user) throw new Error('Não foi possível iniciar a sessão.');
+    const profile = await this.getCurrentUser(data.user.id);
+    await this.logUsage(profile.id, 'LOGIN', { timestamp: new Date().toISOString() });
+    return profile;
+  },
 
-    if (findError && findError.code !== 'PGRST116') { // PGRST116 is "not found"
-      console.error('Error finding user:', findError);
-      throw findError;
+  async getCurrentUser(userId?: string): Promise<User> {
+    let id = userId;
+    if (!id) {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      if (error) throw error;
+      id = user?.id;
     }
+    if (!id) throw new Error('Sessão não encontrada.');
+    const { data, error } = await supabase.from('users').select('id, name, phone, email, role').eq('id', id).single();
+    if (error) throw error;
+    return data as User;
+  },
 
-    if (existingUser) {
-      return existingUser;
-    }
-
-    // 2. If not found, create new user
-    const { data: newUser, error: createError } = await supabase
-      .from('users')
-      .insert([{ name, phone: cleanPhone, role: 'driver' }])
-      .select()
-      .single();
-
-    if (createError) {
-      console.error('Error creating user:', createError);
-      throw createError;
-    }
-
-    const userResult = existingUser || newUser;
-
-    // Log the login action
-    if (userResult) {
-      await this.logUsage(userResult.id, 'LOGIN', {
-        method: existingUser ? 'EXISTING_USER' : 'NEW_REGISTER',
-        timestamp: new Date().toISOString()
-      });
-    }
-
-    return userResult;
+  async signOut(): Promise<void> {
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
   },
 
   async logUsage(userId: string, action: string, details?: any) {
@@ -162,27 +159,21 @@ export const userService = {
   },
 
   async getActiveReservations(): Promise<Reservation[]> {
-    const { data, error } = await supabase
-      .from('reservations')
-      .select('*')
-      .eq('status', 'active')
-      .order('start_time', { ascending: false });
+    const { data, error } = await supabase.rpc('get_active_vehicle_usage');
 
     if (error) {
       console.error('Error fetching active reservations:', error);
       throw error;
     }
 
-    return data.map((r: any) => ({
+    return (data || []).map((r: any) => ({
       id: r.id,
       employeeName: r.employee_name,
       vehicle: r.vehicle,
-      startOdometer: r.start_odometer,
-      endOdometer: r.end_odometer,
-      itinerary: r.itinerary,
+      startOdometer: 0,
+      itinerary: '',
       startTime: r.start_time,
-      endTime: r.end_time,
-      status: r.status
+      status: 'active' as const
     }));
   },
 

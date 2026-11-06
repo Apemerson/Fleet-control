@@ -119,28 +119,26 @@ const App: React.FC = () => {
   
   // Gestão de Sessão do Usuário
   useEffect(() => {
-    const checkSession = async () => {
-      const savedUser = localStorage.getItem('nbapark_user');
-      if (savedUser) {
-        try {
-          const parsedUser = JSON.parse(savedUser);
-          // Validar se o usuário ainda existe no banco (pode ter sido deletado ou DB resetado)
-          const exists = await userService.validateUserExists(parsedUser.id);
-          if (exists) {
-            setUser(parsedUser);
-          } else {
-            console.warn('Sessão inválida: Usuário não existe no banco de dados.');
-            localStorage.removeItem('nbapark_user');
-            setUser(null);
-          }
-        } catch (e) {
-          localStorage.removeItem('nbapark_user');
-          setUser(null);
-        }
+    let mounted = true;
+    const restoreSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) return;
+      try {
+        const profile = await userService.getCurrentUser(session.user.id);
+        if (mounted) setUser(profile);
+      } catch (error) {
+        console.error('Não foi possível carregar o perfil autenticado:', error);
+        await supabase.auth.signOut();
       }
     };
-    
-    checkSession();
+    void restoreSession();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session) setUser(null);
+    });
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   // Atalho de teclado secreto para Admin Dashboard (Ctrl+Shift+A)
@@ -164,6 +162,7 @@ const App: React.FC = () => {
     setTrackingStatus('idle');
     setUser(null);
     localStorage.removeItem('nbapark_user');
+    void userService.signOut().catch(error => console.error('Erro ao encerrar sessão:', error));
   };
 
   useEffect(() => {

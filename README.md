@@ -205,6 +205,17 @@ A aplicação foi projetada para operação móvel contínua em veículos:
 
 O projeto também contém configurações compatíveis com Netlify. Não inclua chaves secretas no código do frontend.
 
+## Deploy no Coolify
+
+1. Conecte sua conta GitHub ao Coolify e crie um recurso do tipo **Application** apontando para este repositório e a branch `main`.
+2. Selecione **Dockerfile** como build pack e mantenha o caminho `/Dockerfile`.
+3. Configure a porta do container como `80` e marque a aplicação como **Public** se ela precisar de um domínio acessível.
+4. Cadastre `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` em **Build Variables**. O Vite incorpora esses valores no frontend durante a compilação; após alterá-los, faça um novo deploy.
+5. Opcionalmente, configure `VITE_GEMINI_API_KEY` apenas se o código ainda usar essa variável diretamente. A integração documentada chama uma Supabase Edge Function `gemini-proxy`; prefira manter a chave Gemini no segredo da função, no Supabase.
+6. Configure o domínio e habilite HTTPS no Coolify.
+
+Este deploy publica o frontend estático. O banco e as APIs devem apontar para um projeto Supabase já configurado, com as tabelas de `database/init.sql`, autenticação e políticas RLS revisadas. O `docker-compose.yml` da raiz é para desenvolvimento local e não deve ser usado como banco de produção no Coolify: ele contém credenciais padrão e uma configuração de gateway separada. O `nginx.conf` continua sendo o gateway local; a imagem Coolify usa `deploy/nginx-spa.conf` para servir o app e rotas SPA.
+
 ## Segurança
 
 - Ative e revise RLS em todas as tabelas do Supabase.
