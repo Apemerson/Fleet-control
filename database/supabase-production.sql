@@ -259,7 +259,7 @@ DROP POLICY IF EXISTS tasks_delete_admin ON public.tasks;
 CREATE POLICY tasks_delete_admin ON public.tasks FOR DELETE TO authenticated USING ((SELECT private.is_admin()));
 
 DROP POLICY IF EXISTS settings_read ON public.app_settings;
-CREATE POLICY settings_read ON public.app_settings FOR SELECT TO anon, authenticated USING (true);
+CREATE POLICY settings_read ON public.app_settings FOR SELECT TO anon, authenticated USING (key <> 'webhook_url');
 DROP POLICY IF EXISTS settings_admin_write ON public.app_settings;
 CREATE POLICY settings_admin_write ON public.app_settings FOR ALL TO authenticated USING ((SELECT private.is_admin())) WITH CHECK ((SELECT private.is_admin()));
 

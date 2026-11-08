@@ -34,57 +34,18 @@ const getSaoPauloISOString = () => {
 
 import { supabase } from '../lib/supabase';
 
-let cachedWebhookUrl: string | null = null;
-let lastFetch = 0;
-
-const getWebhookUrl = async () => {
-  const now = Date.now();
-  // Cache for 1 minute
-  if (cachedWebhookUrl && (now - lastFetch < 60000)) {
-    return cachedWebhookUrl;
-  }
-
-  try {
-    const { data } = await supabase
-      .from('app_settings')
-      .select('value')
-      .eq('key', 'webhook_url')
-      .maybeSingle();
-      
-    if (data?.value) {
-      cachedWebhookUrl = data.value;
-      lastFetch = now;
-      return data.value;
-    }
-  } catch (e) {
-    console.debug('Failed to fetch webhook url', e);
-  }
-  
-  return null;
-};
-
 export const sendWebhook = async (data: any) => {
-  const WEBHOOK_URL = await getWebhookUrl();
-  
-  if (!WEBHOOK_URL) {
-    console.debug("Webhook not configured, skipping.");
-    return;
-  }
-  
   try {
-    // Fire and forget - não bloqueia a execução do app se falhar
-    fetch(WEBHOOK_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+    const { error } = await supabase.functions.invoke('fleet-webhook', {
+      body: {
+        action: 'send',
+        payload: {
+          timestamp: getSaoPauloISOString(),
+          ...data,
+        },
       },
-      body: JSON.stringify({
-        timestamp: getSaoPauloISOString(),
-        ...data
-      }),
-    }).catch(err => console.error("Falha silenciosa no envio do webhook:", err));
-    
-    console.log("Webhook disparado:", data.event);
+    });
+    if (error) console.error('Falha no envio do webhook:', error.message);
   } catch (error) {
     console.error("Erro ao preparar webhook:", error);
   }

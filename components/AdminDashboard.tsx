@@ -5,6 +5,7 @@ import { Reservation, Task, AppSettings } from '../types';
 import { MapaFrota } from './MapaFrota';
 import { TaskMetrics } from './TaskMetrics';
 import { pdfReportService } from '../services/pdfReportService';
+import { PlatformSettings } from './PlatformSettings';
 
 interface AdminDashboardProps {
   onExit: () => void;
@@ -58,7 +59,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, currentU
     dateRange: 'all' // all, today, week, month
   });
   const [webhookUrl, setWebhookUrl] = useState('');
-  const [showWebhookConfig, setShowWebhookConfig] = useState(false);
+  const [webhookConfigured, setWebhookConfigured] = useState(false);
 
   // Check if desktop
   const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 1024);
@@ -93,7 +94,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, currentU
       setTasks(tasksData);
 
       // Load webhook url
-      adminService.getWebhookUrl().then(url => setWebhookUrl(url || ''));
+      adminService.getWebhookUrl().then(setWebhookConfigured).catch(error => {
+        console.error('Error loading webhook status:', error);
+        setWebhookConfigured(false);
+      });
 
       // Fetch users for task assignment (just reusing ranking data for now or fetching specifically)
       const { data: userData } = await supabase.from('users').select('id, name');
@@ -256,11 +260,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, currentU
   const handleSaveWebhook = async () => {
     try {
       await adminService.saveWebhookUrl(webhookUrl);
-      setShowWebhookConfig(false);
-      alert('Webhook salvo com sucesso!');
+      setWebhookConfigured(Boolean(webhookUrl.trim()));
+      setWebhookUrl('');
+      alert(webhookUrl.trim() ? 'Webhook salvo com segurança.' : 'Webhook removido.');
     } catch (error) {
       console.error('Error saving webhook:', error);
       alert('Erro ao salvar webhook.');
+    }
+  };
+
+  const handleClearWebhook = async () => {
+    try {
+      await adminService.saveWebhookUrl('');
+      setWebhookConfigured(false);
+      setWebhookUrl('');
+      alert('Webhook removido.');
+    } catch (error) {
+      console.error('Error removing webhook:', error);
+      alert('Erro ao remover webhook.');
     }
   };
 
@@ -1059,7 +1076,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, currentU
               </div>
               <div className="flex items-end gap-2">
                 <button
-                  onClick={() => setShowWebhookConfig(true)}
+                  onClick={() => setActiveSection('settings')}
                   className="bg-white/10 hover:bg-white/20 text-white font-bold px-4 py-2 rounded-lg transition-all text-sm flex-1"
                 >
                   <i className="fas fa-cog mr-2"></i>
@@ -1240,57 +1257,84 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, currentU
       {
         activeSection === 'settings' && editingSettings && (
           <div className="space-y-6 animate-fadeIn">
-            <div className="bg-black/30 backdrop-blur-xl rounded-3xl p-8 border border-white/10">
-              <h3 className="text-xl font-black uppercase tracking-wider mb-6 flex items-center gap-3">
-                <i className="fas fa-cog text-blue-400"></i>
-                Configurações da Aplicação
-              </h3>
-
-              <form onSubmit={handleSaveSettings} className="space-y-6 max-w-2xl">
-                <div>
-                  <label className="block text-xs font-bold text-gray-400 mb-2 uppercase">Nome da Empresa</label>
-                  <input
-                    type="text"
-                    value={editingSettings.companyName}
-                    onChange={(e) => setEditingSettings({ ...editingSettings, companyName: e.target.value })}
-                    className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white font-bold focus:border-blue-500 outline-none transition-all"
-                    placeholder="Ex: NBAPARK Fleet Control"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-gray-400 mb-2 uppercase">URL da Logomarca</label>
-                  <input
-                    type="text"
-                    value={editingSettings.logoUrl}
-                    onChange={(e) => setEditingSettings({ ...editingSettings, logoUrl: e.target.value })}
-                    className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white font-bold focus:border-blue-500 outline-none transition-all"
-                    placeholder="Ex: /logo.png ou https://..."
-                  />
-                  <p className="text-xs text-gray-500 mt-2">Recomendado: Imagem PNG com fundo transparente.</p>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-gray-400 mb-2 uppercase">Texto "Sobre a Aplicação"</label>
-                  <textarea
-                    value={editingSettings.aboutText}
-                    onChange={(e) => setEditingSettings({ ...editingSettings, aboutText: e.target.value })}
-                    className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white font-bold focus:border-blue-500 outline-none transition-all h-32 resize-none"
-                    placeholder="Texto exibido na tela Sobre..."
-                  />
-                </div>
-
-                <div className="pt-4">
-                  <button
-                    type="submit"
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-8 py-3 rounded-xl transition-all shadow-lg hover:shadow-blue-500/20"
-                  >
-                    <i className="fas fa-save mr-2"></i>
-                    Salvar Alterações
-                  </button>
-                </div>
-              </form>
+            <div>
+              <h2 className="text-2xl font-black uppercase tracking-wide">Central de Configurações</h2>
+              <p className="text-sm text-gray-400 mt-1">Ajustes da frota e acesso aos serviços conectados.</p>
             </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+              <section className="bg-black/30 backdrop-blur-xl rounded-3xl p-7 border border-white/10">
+                <h3 className="text-lg font-black uppercase tracking-wider mb-6 flex items-center gap-3">
+                  <i className="fas fa-sliders-h text-blue-400"></i> Aplicação
+                </h3>
+                <form onSubmit={handleSaveSettings} className="space-y-5">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-400 mb-2 uppercase">Nome da Empresa</label>
+                    <input type="text" value={editingSettings.companyName} onChange={(e) => setEditingSettings({ ...editingSettings, companyName: e.target.value })} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white font-bold focus:border-blue-500 outline-none transition-all" placeholder="Ex: ET Frota" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-400 mb-2 uppercase">URL da Logomarca</label>
+                    <input type="text" value={editingSettings.logoUrl} onChange={(e) => setEditingSettings({ ...editingSettings, logoUrl: e.target.value })} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white font-bold focus:border-blue-500 outline-none transition-all" placeholder="/logo.png ou https://..." />
+                    <p className="text-xs text-gray-500 mt-2">Use um caminho da aplicação ou uma imagem HTTPS.</p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-400 mb-2 uppercase">Sobre a Aplicação</label>
+                    <textarea value={editingSettings.aboutText} onChange={(e) => setEditingSettings({ ...editingSettings, aboutText: e.target.value })} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white font-bold focus:border-blue-500 outline-none transition-all h-28 resize-none" placeholder="Texto exibido na tela Sobre..." />
+                  </div>
+                  <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-3 rounded-xl transition-all shadow-lg">
+                    <i className="fas fa-save mr-2"></i>Salvar alterações
+                  </button>
+                </form>
+              </section>
+
+              <section className="bg-black/30 backdrop-blur-xl rounded-3xl p-7 border border-white/10">
+                <div className="flex items-start justify-between gap-3 mb-4">
+                  <h3 className="text-lg font-black uppercase tracking-wider flex items-center gap-3">
+                    <i className="fas fa-plug text-emerald-400"></i> Webhook de eventos
+                  </h3>
+                  <span className={`text-[10px] font-black uppercase px-3 py-1.5 rounded-full ${webhookConfigured ? 'bg-emerald-500/15 text-emerald-300' : 'bg-white/10 text-gray-400'}`}>
+                    {webhookConfigured ? 'Configurado' : 'Desativado'}
+                  </span>
+                </div>
+                <p className="text-sm text-gray-400 mb-5">Receba eventos de viagens e tarefas em um endpoint HTTPS. A URL é guardada no servidor e não é enviada aos motoristas.</p>
+                <label className="block text-xs font-bold text-gray-400 mb-2 uppercase">URL do webhook</label>
+                <input type="url" value={webhookUrl} onChange={e => setWebhookUrl(e.target.value)} placeholder={webhookConfigured ? 'URL salva; informe outra para substituir' : 'https://...'} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white font-bold outline-none focus:border-blue-500 mb-4" />
+                <div className="flex flex-wrap gap-3">
+                  <button onClick={handleSaveWebhook} disabled={!webhookUrl.trim()} className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white font-bold px-5 py-3 rounded-xl transition-all">
+                    <i className="fas fa-save mr-2"></i>{webhookConfigured ? 'Trocar URL' : 'Salvar URL'}
+                  </button>
+                  {webhookConfigured && <button type="button" onClick={handleClearWebhook} className="bg-red-500/15 hover:bg-red-500/25 text-red-200 font-bold px-5 py-3 rounded-xl transition-all">Remover webhook</button>}
+                </div>
+                <p className="text-xs text-gray-500 mt-4">Por segurança, o endpoint precisa usar HTTPS e não pode apontar para endereços locais.</p>
+              </section>
+            </div>
+
+            <section className="bg-black/30 backdrop-blur-xl rounded-3xl p-7 border border-white/10">
+              <h3 className="text-lg font-black uppercase tracking-wider mb-2 flex items-center gap-3">
+                <i className="fas fa-server text-amber-300"></i> Serviços conectados
+              </h3>
+              <p className="text-sm text-gray-400 mb-5">Banco, login e infraestrutura são administrados nos serviços abaixo. Esses atalhos mantêm os segredos fora do navegador da frota.</p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <a href="https://supabase.com/dashboard/project/owvbxpugkybolyojukqo" target="_blank" rel="noreferrer" className="rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 p-5 transition-colors">
+                  <div className="flex items-center gap-3 mb-2"><i className="fas fa-database text-emerald-300"></i><strong>Supabase</strong><i className="fas fa-external-link-alt ml-auto text-xs text-gray-500"></i></div>
+                  <p className="text-xs text-gray-400">Banco de dados, usuários, políticas, autenticação e e-mails.</p>
+                </a>
+                <a href="https://coolify.emersontorres.com.br/" target="_blank" rel="noreferrer" className="rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 p-5 transition-colors">
+                  <div className="flex items-center gap-3 mb-2"><i className="fas fa-cloud text-blue-300"></i><strong>Coolify</strong><i className="fas fa-external-link-alt ml-auto text-xs text-gray-500"></i></div>
+                  <p className="text-xs text-gray-400">Implantação, domínio, variáveis do app, saúde e reinicialização.</p>
+                </a>
+                <a href="https://github.com/Apemerson/Fleet-control/actions/workflows/build-android-apk.yml" target="_blank" rel="noreferrer" className="rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 p-5 transition-colors">
+                  <div className="flex items-center gap-3 mb-2"><i className="fab fa-github text-white"></i><strong>GitHub Actions</strong><i className="fas fa-external-link-alt ml-auto text-xs text-gray-500"></i></div>
+                  <p className="text-xs text-gray-400">Compilação e publicação do aplicativo Android.</p>
+                </a>
+              </div>
+              <div className="mt-5 rounded-xl border border-blue-400/20 bg-blue-400/5 p-4 text-sm text-blue-100/80">
+                <i className="fas fa-shield-alt mr-2"></i>
+                O painel usa funções de servidor autenticadas para operações de infraestrutura. Os tokens são digitados pelo administrador e ficam apenas na memória da tela durante a sessão.
+              </div>
+            </section>
+
+            <PlatformSettings />
           </div>
         )
       }
@@ -1364,40 +1408,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, currentU
                   Criar Tarefa
                 </button>
               </form>
-            </div>
-          </div>
-        )
-      }
-
-      {/* Webhook Config Modal */}
-      {
-        showWebhookConfig && (
-          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="bg-gray-900 rounded-3xl p-8 max-w-md w-full border border-white/20">
-              <h3 className="text-xl font-black uppercase mb-2">Configurar Webhook</h3>
-              <p className="text-gray-400 text-sm mb-6">URL para receber notificações de eventos.</p>
-
-              <input
-                value={webhookUrl}
-                onChange={e => setWebhookUrl(e.target.value)}
-                placeholder="https://..."
-                className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white font-bold outline-none focus:border-blue-500 mb-6"
-              />
-
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setShowWebhookConfig(false)}
-                  className="flex-1 bg-white/10 hover:bg-white/20 text-white font-bold py-3 rounded-xl"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleSaveWebhook}
-                  className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-xl"
-                >
-                  Salvar
-                </button>
-              </div>
             </div>
           </div>
         )

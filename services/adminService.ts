@@ -573,22 +573,18 @@ export const adminService = {
     if (error) throw error;
   },
 
-  async getWebhookUrl(): Promise<string | null> {
-    const { data, error } = await supabase
-      .from('app_settings')
-      .select('value')
-      .eq('key', 'webhook_url')
-      .maybeSingle();
-
-    if (error || !data) return null;
-    return data.value;
+  async getWebhookUrl(): Promise<boolean> {
+    const { data, error } = await supabase.functions.invoke('fleet-webhook', {
+      body: { action: 'status' },
+    });
+    if (error) throw error;
+    return Boolean(data?.configured);
   },
 
   async saveWebhookUrl(url: string): Promise<void> {
-    const { error } = await supabase
-      .from('app_settings')
-      .upsert({ key: 'webhook_url', value: url });
-
+    const { error } = await supabase.functions.invoke('fleet-webhook', {
+      body: { action: 'save', url },
+    });
     if (error) throw error;
   }
 };
